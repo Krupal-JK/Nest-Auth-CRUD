@@ -16,7 +16,16 @@ export class User {
     @Column()
     email: String
     
-    @Column()
+    @Column({default: 18})
     age: number
+
+    @Column()
+    password: String
+
+    @Column({default: null})
+    profile: String
+
+    @Column({default: false})
+    verified: Boolean
     
 }
