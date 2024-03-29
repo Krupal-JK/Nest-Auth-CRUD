@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
 import { UserService } from './user.service';
-import { CreateUserDto } from './dto/create-user.dto';
+import { CreateUserDto, OtpDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { AuthGuard } from 'src/middleware/verify.token.middleware';
 
 @Controller('user')
 export class UserController {
@@ -12,6 +13,17 @@ export class UserController {
     return this.userService.create(createUserDto);
   }
 
+  @Post('verifyUser')
+  verify(@Body() otpDto: OtpDto) {
+    return this.userService.verify(otpDto);
+  }
+
+  @Post('login')
+  login(@Body() createUserDto: CreateUserDto) {
+    return this.userService.login(createUserDto);
+  }
+
+  @UseGuards(AuthGuard)
   @Get('getAllUsers')
   findAll() {
     return this.userService.findAll();

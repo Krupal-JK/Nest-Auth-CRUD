@@ -5,6 +5,8 @@ import { FindOneOptions, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
+import * as jwt from 'jsonwebtoken';
+import * as config from 'config';
 import { EmailService } from './email.service';
 import { Otp } from './entities/otp.entity';
  
@@ -53,7 +55,8 @@ export class UserService {
       let existOTP = await this.otpRepository.findOne(otpOptions)
       console.log(existOTP, "==++++++++")
 
-      const otpNumber : string = (Math.floor(100000 + Math.random() * 900000)).toString()
+      // const otpNumber : string = (Math.floor(100000 + Math.random() * 900000)).toString()
+      const otpNumber : string = "1111"
       let hashOTP = await bcrypt.hash(otpNumber, 10);
 
       const now = new Date();
@@ -108,6 +111,28 @@ export class UserService {
       await this.otpRepository.delete(existOTP.id)
 
       return { code: 201, message: 'User verified succesfully', result };
+    } catch (error) {
+      return { code: 500, message: error.message };
+    }
+  }
+
+  async login(@Body() createUserDto: CreateUserDto) {
+    try {
+          
+      const userOptions: FindOneOptions<User> = {where: { email: createUserDto.email },};
+      let existUser = await this.userRepository.findOne(userOptions)
+
+      if(!existUser) return { code: 404, message: "User not found!" };
+      
+      const isMatch = await bcrypt.compare(createUserDto.password, existUser.password.toString())
+      
+      if(!isMatch) return { code: 404, message: "Invalid password!" };
+
+      if(!existUser.verified) return { code: 404, message: "User not verified!" };
+
+      const token = await jwt.sign({ email: existUser.email, user_id: existUser.id}, process.env.JWT_SECRET, {expiresIn: process.env.JWT_SECRET_EXPIRATION})
+
+      return { code: 201, message: 'User login succesfully', existUser, token}
     } catch (error) {
       return { code: 500, message: error.message };
     }
