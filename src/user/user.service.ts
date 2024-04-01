@@ -1,5 +1,5 @@
 import { Body, Injectable } from '@nestjs/common';
-import { CreateUserDto, OtpDto } from './dto/create-user.dto';
+import { CreateUserDto, ForgotPasswordDto, OtpDto, ResetPasswordDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { FindOneOptions, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
@@ -85,6 +85,52 @@ export class UserService {
     }
   }
 
+  async sendOtp(createUserDto: CreateUserDto) {
+    try {
+      const options: FindOneOptions<User> = {
+        where: { email: createUserDto.email },
+      };
+
+      const existUser = await this.userRepository.findOne(options);
+      if (!existUser) return { code: 409, message: 'User not found!' };
+      
+      let otp: Otp = new Otp();
+      
+      const otpOptions: FindOneOptions<Otp> = {where: { email: createUserDto.email },};
+      let existOTP = await this.otpRepository.findOne(otpOptions)
+      console.log(existOTP, "==++++++++")
+
+      // const otpNumber : string = (Math.floor(100000 + Math.random() * 900000)).toString()
+      const otpNumber : string = "1111"
+      let hashOTP = await bcrypt.hash(otpNumber, 10);
+
+      const now = new Date();
+      const oneHourLater = new Date(now.getTime() + 1 * 60 * 60 * 1000);
+
+      if(existOTP){
+
+        await this.otpRepository.delete(existOTP.id) 
+        otp.email = createUserDto.email;
+        otp.otp = hashOTP
+        otp.expire_time = oneHourLater
+        await this.otpRepository.save(otp);  
+
+      }else{     
+        
+        otp.email = createUserDto.email;
+        otp.otp = hashOTP     
+        otp.expire_time = oneHourLater
+        await this.otpRepository.save(otp);
+      }     
+
+      await this.emailService.sendVerifyEmail(createUserDto.email, Number(otpNumber))
+      
+      return { code: 201, message: 'Otp sent succesfully'};
+    } catch (error) {
+      return { code: 500, message: error.message };
+    }
+  }
+
   async verify(@Body() otpDto: OtpDto) {
     try {
       
@@ -104,13 +150,22 @@ export class UserService {
 
       if(!existUser) return { code: 404, message: "User not found!" };
       
-      existUser.verified = true
+      let result
+      if(otpDto.verify){
 
-      const result = await this.userRepository.save(existUser)
+        existUser.verified = true
+        result = await this.userRepository.save(existUser)
+
+      }else{
+
+        result = true
+
+      }
 
       await this.otpRepository.delete(existOTP.id)
 
       return { code: 201, message: 'User verified succesfully', result };
+
     } catch (error) {
       return { code: 500, message: error.message };
     }
@@ -167,6 +222,71 @@ export class UserService {
 
       const updatedUser = await this.userRepository.save(user);
       return {code: 201, message: "User updated successfully", updatedUser}
+      
+    } catch (error) {
+      return { code: 500, message: error.message };
+    }
+  }
+
+  async resetPassword(id: number, resetPassword: ResetPasswordDto) {
+    try {
+      const options: FindOneOptions<User> = {
+        where: { id: id},
+      };
+
+      const existUser = await this.userRepository.findOne(options);
+      if(!existUser) return { code: 404, message: "User not found!" };
+
+      const isMatch = await bcrypt.compare(resetPassword.old_pass, existUser.password.toString())
+      if(!isMatch) return { code: 404, message: "Old password is not match!" };
+
+      const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
+
+      function validatePassword(password) {
+        return passwordRegex.test(password);
+      }
+
+      if(!validatePassword(resetPassword.new_pass))
+        return { code: 404, message: 'Password must be minimum six characters, at least one letter and one number'}
+
+
+      const hashPass = await bcrypt.hash(resetPassword.new_pass, 10)
+      existUser.password = hashPass
+
+      await this.userRepository.save(existUser)
+
+      return {code: 201, message: "Password updated successfully"}
+      
+    } catch (error) {
+      return { code: 500, message: error.message };
+    }
+  }
+
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
+    try {
+      const options: FindOneOptions<User> = {
+        where: { email: forgotPasswordDto.email},
+      };
+
+      const existUser = await this.userRepository.findOne(options);
+      if(!existUser) return { code: 404, message: "User not found!" };
+
+      const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
+
+      function validatePassword(password) {
+        return passwordRegex.test(password);
+      }
+
+      if(!validatePassword(forgotPasswordDto.new_pass))
+        return { code: 404, message: 'Password must be minimum six characters, at least one letter and one number'}
+
+
+      const hashPass = await bcrypt.hash(forgotPasswordDto.new_pass, 10)
+      existUser.password = hashPass
+
+      await this.userRepository.save(existUser)
+
+      return {code: 201, message: "Password updated successfully"}
       
     } catch (error) {
       return { code: 500, message: error.message };
